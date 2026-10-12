@@ -1,0 +1,11 @@
+create table if not exists public.allowed_users (email text primary key);
+alter table public.allowed_users enable row level security;
+create or replace function public.is_allowed() returns boolean language sql stable security definer set search_path = public as $$ select exists (select 1 from public.allowed_users where lower(email) = lower(auth.jwt() ->> 'email')); $$;
+create table if not exists public.photos (id uuid primary key default gen_random_uuid(), owner_id uuid not null references auth.users(id) on delete cascade, storage_key text not null unique, image_url text, caption text default '', created_at timestamptz not null default now());
+alter table public.photos add column if not exists image_url text;
+alter table public.photos enable row level security;
+drop policy if exists "approved people can see metadata" on public.photos;
+drop policy if exists "approved people can add metadata" on public.photos;
+create policy "approved people can see metadata" on public.photos for select using (public.is_allowed());
+create policy "approved people can add metadata" on public.photos for insert with check (public.is_allowed() and owner_id = auth.uid());
+insert into public.allowed_users (email) values ('first@example.com'), ('second@example.com') on conflict (email) do nothing;
